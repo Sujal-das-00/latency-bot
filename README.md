@@ -19,19 +19,38 @@ There are no API keys, no authenticated websocket sessions, no REST trading endp
 
 ## Build
 
-Install `fmt` and `spdlog`, then:
+Install `fmt`, `spdlog`, `OpenSSL`, and `Boost` (the last two are needed for the live runner), then configure and build:
 
 ```bash
 cmake -S . -B build
 cmake --build build
-ctest --test-dir build --output-on-failure
 ```
 
-If the libraries are not installed and network access is available:
+If `fmt`/`spdlog` are not installed and network access is available, let CMake fetch them:
 
 ```bash
 cmake -S . -B build -DLATENCY_ARB_FETCH_DEPS=ON
 cmake --build build
+```
+
+This produces three binaries in `build/`:
+
+- `latency_arb_backtest` — CSV replay backtester
+- `latency_arb_live` — public-websocket paper-only live validator
+- `latency_arb_tests` — unit tests
+
+## Test
+
+Run the full test suite after building:
+
+```bash
+ctest --test-dir build --output-on-failure
+```
+
+Or run the test binary directly:
+
+```bash
+./build/latency_arb_tests
 ```
 
 ## Replay Backtest
@@ -83,14 +102,29 @@ backtester.on_book(Exchange::Target, phemex_spot_book);
 
 When validation is statistically acceptable, execution should be added behind a separate Phemex Spot execution interface. That interface is intentionally absent from this project right now.
 
+## Run Live (Paper Only)
 
+```bash
 ./build/latency_arb_live --output=out-live --min-spread-bps=10 --duration-seconds=120
-cat out-live/logs/signals_2026-06-18.log
+```
 
+Signals are streamed to the terminal and persisted to a date-named log file:
 
+```bash
+cat out-live/logs/signals_$(date +%F).log
+```
+
+The CSV summaries (`out-live/paper_validation.csv`, `out-live/statistics.csv`) are written when the run finishes (`--duration-seconds` elapses).
+
+## Run 24x7 with pm2
+
+```bash
 cd "/home/suajldas/Desktop/experiments/latency bot"
 pm2 start ./build/latency_arb_live \
   --name latency-bot \
   --interpreter none \
   -- \
   --output=out-live --min-spread-bps=10 --duration-seconds=86400
+```
+
+`pm2` keeps the bot running 24x7 via `autorestart`; `--duration-seconds=86400` makes it finalize a CSV summary and roll over once per day. Persist across reboots with `pm2 save && pm2 startup`.
